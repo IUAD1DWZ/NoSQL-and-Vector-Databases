@@ -1,0 +1,176 @@
+db.tracks.find(
+  {
+    track_genre: "pop",
+    popularity: { $gte: 70 }
+  }
+).explain("executionStats")
+
+{
+  explainVersion: '1',
+  queryPlanner: {
+    namespace: 'spotify.tracks',
+    parsedQuery: {
+      '$and': [
+        {
+          track_genre: {
+            '$eq': 'pop'
+          }
+        },
+        {
+          popularity: {
+            '$gte': 70
+          }
+        }
+      ]
+    },
+    indexFilterSet: false,
+    queryHash: '122B8EF1',
+    planCacheShapeHash: '122B8EF1',
+    planCacheKey: '7F397BE4',
+    optimizationTimeMillis: 0,
+    maxIndexedOrSolutionsReached: false,
+    maxIndexedAndSolutionsReached: false,
+    maxScansToExplodeReached: false,
+    prunedSimilarIndexes: false,
+    winningPlan: {
+      isCached: false,
+      stage: 'FETCH',
+      inputStage: {
+        stage: 'IXSCAN',
+        keyPattern: {
+          track_genre: 1,
+          popularity: -1,
+          'audio_features.danceability': 1
+        },
+        indexName: 'idx_genre_popularity_danceability',
+        isMultiKey: false,
+        multiKeyPaths: {
+          track_genre: [],
+          popularity: [],
+          'audio_features.danceability': []
+        },
+        isUnique: false,
+        isSparse: false,
+        isPartial: false,
+        indexVersion: 2,
+        direction: 'forward',
+        indexBounds: {
+          track_genre: [
+            '["pop", "pop"]'
+          ],
+          popularity: [
+            '[inf.0, 70]'
+          ],
+          'audio_features.danceability': [
+            '[MinKey, MaxKey]'
+          ]
+        }
+      }
+    },
+    rejectedPlans: []
+  },
+  executionStats: {
+    executionSuccess: true,
+    nReturned: 317,
+    executionTimeMillis: 0,
+    totalKeysExamined: 317,
+    totalDocsExamined: 317,
+    executionStages: {
+      isCached: false,
+      stage: 'FETCH',
+      nReturned: 317,
+      executionTimeMillisEstimate: 0,
+      works: 318,
+      advanced: 317,
+      needTime: 0,
+      needYield: 0,
+      saveState: 0,
+      restoreState: 0,
+      isEOF: 1,
+      docsExamined: 317,
+      alreadyHasObj: 0,
+      inputStage: {
+        stage: 'IXSCAN',
+        nReturned: 317,
+        executionTimeMillisEstimate: 0,
+        works: 318,
+        advanced: 317,
+        needTime: 0,
+        needYield: 0,
+        saveState: 0,
+        restoreState: 0,
+        isEOF: 1,
+        keyPattern: {
+          track_genre: 1,
+          popularity: -1,
+          'audio_features.danceability': 1
+        },
+        indexName: 'idx_genre_popularity_danceability',
+        isMultiKey: false,
+        multiKeyPaths: {
+          track_genre: [],
+          popularity: [],
+          'audio_features.danceability': []
+        },
+        isUnique: false,
+        isSparse: false,
+        isPartial: false,
+        indexVersion: 2,
+        direction: 'forward',
+        indexBounds: {
+          track_genre: [
+            '["pop", "pop"]'
+          ],
+          popularity: [
+            '[inf.0, 70]'
+          ],
+          'audio_features.danceability': [
+            '[MinKey, MaxKey]'
+          ]
+        },
+        keysExamined: 317,
+        seeks: 1,
+        dupsTested: 0,
+        dupsDropped: 0
+      }
+    }
+  },
+  queryShapeHash: 'E9FBD4EF3043321550F13C72407C4B7DD2F28925927E11F65DE8FB4B8A1B3023',
+  command: {
+    find: 'tracks',
+    filter: {
+      track_genre: 'pop',
+      popularity: {
+        '$gte': 70
+      }
+    },
+    '$db': 'spotify'
+  },
+  serverInfo: {
+    host: 'ac-ogmj0ay-shard-00-01.jfvh4gw.mongodb.net',
+    port: 27017,
+    version: '8.0.24',
+    gitVersion: 'b19191cc9f5587bb41616283b0a4ca0b3ae522ae'
+  },
+  serverParameters: {
+    internalQueryFacetBufferSizeBytes: 104857600,
+    internalQueryFacetMaxOutputDocSizeBytes: 104857600,
+    internalLookupStageIntermediateDocumentMaxSizeBytes: 16793600,
+    internalDocumentSourceGroupMaxMemoryBytes: 104857600,
+    internalQueryMaxBlockingSortMemoryUsageBytes: 33554432,
+    internalQueryProhibitBlockingMergeOnMongoS: 0,
+    internalQueryMaxAddToSetBytes: 104857600,
+    internalDocumentSourceSetWindowFieldsMaxMemoryBytes: 104857600,
+    internalQueryFrameworkControl: 'trySbeRestricted',
+    internalQueryPlannerIgnoreIndexWithCollationForRegex: 1
+  },
+  ok: 1,
+  '$clusterTime': {
+    clusterTime: Timestamp({ t: 1780601422, i: 8 }),
+    signature: {
+      hash: Binary.createFromBase64('S+AwcviElWlaishW5mG0sdCCJaQ=', 0),
+      keyId: 7598201882867139000
+    }
+  },
+  operationTime: Timestamp({ t: 1780601422, i: 8 })
+}

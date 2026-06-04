@@ -1,0 +1,228 @@
+db.tracks.find(
+  {
+    explicit: false,
+    "audio_features.instrumentalness": { $gt: 0.5 },
+    "audio_features.speechiness": { $lt: 0.1 }
+  },
+  {
+    track_name: 1,
+    artists: 1,
+    explicit: 1,
+    "audio_features.instrumentalness": 1,
+    "audio_features.speechiness": 1
+  }
+).explain("executionStats")
+
+{
+  explainVersion: '1',
+  queryPlanner: {
+    namespace: 'spotify.tracks',
+    parsedQuery: {
+      '$and': [
+        {
+          explicit: {
+            '$eq': false
+          }
+        },
+        {
+          'audio_features.speechiness': {
+            '$lt': 0.1
+          }
+        },
+        {
+          'audio_features.instrumentalness': {
+            '$gt': 0.5
+          }
+        }
+      ]
+    },
+    indexFilterSet: false,
+    queryHash: '2C7957C1',
+    planCacheShapeHash: '2C7957C1',
+    planCacheKey: 'A14B3D1E',
+    optimizationTimeMillis: 0,
+    maxIndexedOrSolutionsReached: false,
+    maxIndexedAndSolutionsReached: false,
+    maxScansToExplodeReached: false,
+    prunedSimilarIndexes: false,
+    winningPlan: {
+      isCached: false,
+      stage: 'PROJECTION_DEFAULT',
+      transformBy: {
+        track_name: 1,
+        artists: 1,
+        explicit: 1,
+        'audio_features.instrumentalness': 1,
+        'audio_features.speechiness': 1
+      },
+      inputStage: {
+        stage: 'FETCH',
+        inputStage: {
+          stage: 'IXSCAN',
+          keyPattern: {
+            explicit: 1,
+            'audio_features.instrumentalness': 1,
+            'audio_features.speechiness': 1
+          },
+          indexName: 'idx_explicit_instrumentalness_speechiness',
+          isMultiKey: false,
+          multiKeyPaths: {
+            explicit: [],
+            'audio_features.instrumentalness': [],
+            'audio_features.speechiness': []
+          },
+          isUnique: false,
+          isSparse: false,
+          isPartial: false,
+          indexVersion: 2,
+          direction: 'forward',
+          indexBounds: {
+            explicit: [
+              '[false, false]'
+            ],
+            'audio_features.instrumentalness': [
+              '(0.5, inf.0]'
+            ],
+            'audio_features.speechiness': [
+              '[-inf.0, 0.1)'
+            ]
+          }
+        }
+      }
+    },
+    rejectedPlans: []
+  },
+  executionStats: {
+    executionSuccess: true,
+    nReturned: 16141,
+    executionTimeMillis: 54,
+    totalKeysExamined: 16602,
+    totalDocsExamined: 16141,
+    executionStages: {
+      isCached: false,
+      stage: 'PROJECTION_DEFAULT',
+      nReturned: 16141,
+      executionTimeMillisEstimate: 55,
+      works: 16602,
+      advanced: 16141,
+      needTime: 460,
+      needYield: 0,
+      saveState: 3,
+      restoreState: 3,
+      isEOF: 1,
+      transformBy: {
+        track_name: 1,
+        artists: 1,
+        explicit: 1,
+        'audio_features.instrumentalness': 1,
+        'audio_features.speechiness': 1
+      },
+      inputStage: {
+        stage: 'FETCH',
+        nReturned: 16141,
+        executionTimeMillisEstimate: 26,
+        works: 16602,
+        advanced: 16141,
+        needTime: 460,
+        needYield: 0,
+        saveState: 3,
+        restoreState: 3,
+        isEOF: 1,
+        docsExamined: 16141,
+        alreadyHasObj: 0,
+        inputStage: {
+          stage: 'IXSCAN',
+          nReturned: 16141,
+          executionTimeMillisEstimate: 13,
+          works: 16602,
+          advanced: 16141,
+          needTime: 460,
+          needYield: 0,
+          saveState: 3,
+          restoreState: 3,
+          isEOF: 1,
+          keyPattern: {
+            explicit: 1,
+            'audio_features.instrumentalness': 1,
+            'audio_features.speechiness': 1
+          },
+          indexName: 'idx_explicit_instrumentalness_speechiness',
+          isMultiKey: false,
+          multiKeyPaths: {
+            explicit: [],
+            'audio_features.instrumentalness': [],
+            'audio_features.speechiness': []
+          },
+          isUnique: false,
+          isSparse: false,
+          isPartial: false,
+          indexVersion: 2,
+          direction: 'forward',
+          indexBounds: {
+            explicit: [
+              '[false, false]'
+            ],
+            'audio_features.instrumentalness': [
+              '(0.5, inf.0]'
+            ],
+            'audio_features.speechiness': [
+              '[-inf.0, 0.1)'
+            ]
+          },
+          keysExamined: 16602,
+          seeks: 461,
+          dupsTested: 0,
+          dupsDropped: 0
+        }
+      }
+    }
+  },
+  queryShapeHash: '7C5299A1C146FDC73DDA2B8AC9B1C58853696136C2642EE66C67F156E4392504',
+  command: {
+    find: 'tracks',
+    filter: {
+      explicit: false,
+      'audio_features.instrumentalness': {
+        '$gt': 0.5
+      },
+      'audio_features.speechiness': {
+        '$lt': 0.1
+      }
+    },
+    projection: {
+      track_name: 1,
+      artists: 1,
+      explicit: 1,
+      'audio_features.instrumentalness': 1,
+      'audio_features.speechiness': 1
+    },
+    '$db': 'spotify'
+  },
+  serverInfo: {
+    host: 'ac-ogmj0ay-shard-00-01.jfvh4gw.mongodb.net',
+    port: 27017,
+    version: '8.0.24',
+    gitVersion: 'b19191cc9f5587bb41616283b0a4ca0b3ae522ae'
+  },
+  serverParameters: {
+    internalQueryFacetBufferSizeBytes: 104857600,
+    internalQueryFacetMaxOutputDocSizeBytes: 104857600,
+    internalLookupStageIntermediateDocumentMaxSizeBytes: 16793600,
+    internalDocumentSourceGroupMaxMemoryBytes: 104857600,
+    internalQueryMaxBlockingSortMemoryUsageBytes: 33554432,
+    internalQueryProhibitBlockingMergeOnMongoS: 0,
+    internalQueryMaxAddToSetBytes: 104857600,
+    internalDocumentSourceSetWindowFieldsMaxMemoryBytes: 104857600,
+    internalQueryFrameworkControl: 'trySbeRestricted',
+    internalQueryPlannerIgnoreIndexWithCollationForRegex: 1
+  },
+  ok: 1,
+  '$clusterTime': {
+    clusterTime: Timestamp({ t: 1780601299, i: 1 }),
+    signature: {
+      hash: Binary.createFromBase64('iyhTgu/C+hXrmPt2Kaegh1VRnAs=', 0),
+      keyId: 7598201882867139000
+    }
+  },
+  operationTime: Timestamp({ t: 1780601299, i: 1 })
+}

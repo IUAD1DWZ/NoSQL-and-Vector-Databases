@@ -1,6 +1,6 @@
 // scripts/02_transform.js
 // Run:
-// mongosh "YOUR_MONGO_URI/spotify" --file scripts/02_transform.js
+// mongosh "YOUR_MONGO_URI/spotify" --file HW-1/scripts/02_transform.js
 
 const dbName = "spotify";
 const sourceCollection = "tracks_raw";
