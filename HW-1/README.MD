@@ -26,26 +26,24 @@
 
 ```text
 .
-├── .gitignore
+├── .env
 ├── README.MD
 ├── image.png
 ├── image-1.png
 ├── image-2.png
 ├── image-3.png
 ├── image-4.png
-└── HW-1/
-    ├── .env
-    ├── scripts/
-    │   ├── 01_load_data.py
-    │   └── 02_transform.js
-    ├── queries/
-    │   ├── part2_queries.js
-    │   ├── part3_aggregations.js
-    │   └── part4_indexes.js
-    └── explain/
-        ├── 1.txt
-        ├── 2.txt
-        └── 3.txt
+├── scripts/
+│   ├── 01_load_data.py
+│   └── 02_transform.js
+├── queries/
+│   ├── part2_queries.js
+│   ├── part3_aggregations.js
+│   └── part4_indexes.js
+└── explain/
+    ├── 1.txt
+    ├── 2.txt
+    └── 3.txt
 ```
 
 ## Налаштування оточення
@@ -64,7 +62,7 @@
 
 ### 2. Файл `.env`
 
-У папці `HW-1` потрібно створити файл `.env`:
+У корені цієї папки потрібно створити файл `.env`:
 
 ```env
 MONGO_URI=mongodb+srv://user:password@cluster.mongodb.net/
@@ -99,14 +97,14 @@ python3 -m pip install --user pandas pymongo tqdm python-dotenv kagglehub
 
 ```bash
 set -a
-source HW-1/.env
+source .env
 set +a
 
-/Users/valeriya/Documents/GIT/NoSQL-and-Vector-Databases/.venv/bin/python HW-1/scripts/01_load_data.py
-mongosh "$MONGO_URI/spotify" --file HW-1/scripts/02_transform.js
-mongosh "$MONGO_URI/spotify" --file HW-1/queries/part2_queries.js
-mongosh "$MONGO_URI/spotify" --file HW-1/queries/part3_aggregations.js
-mongosh "$MONGO_URI/spotify" --file HW-1/queries/part4_indexes.js
+python3 scripts/01_load_data.py
+mongosh "$MONGO_URI/spotify" --file scripts/02_transform.js
+mongosh "$MONGO_URI/spotify" --file queries/part2_queries.js
+mongosh "$MONGO_URI/spotify" --file queries/part3_aggregations.js
+mongosh "$MONGO_URI/spotify" --file queries/part4_indexes.js
 ```
 
 ## Частина 1 — Завантаження даних і схема
