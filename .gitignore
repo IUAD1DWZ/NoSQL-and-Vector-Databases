@@ -4,3 +4,10 @@ __pycache__/
 
 .env
 *.env
+
+# HW-2 local data and credentials
+HW-2-pinecone/data/arxiv.zip
+HW-2-pinecone/data/arxiv-metadata-oai-snapshot.json
+HW-2-pinecone/data/kaggle.json
+HW-2-pinecone/data/
+HW-2-pinecone/embeddings/
