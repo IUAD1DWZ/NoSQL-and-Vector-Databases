@@ -1,25 +1,34 @@
 // =====================================================
 // PART 5. GRAPH DATA SCIENCE
+// Neo4j 5.x / reduced working subgraphs
 // =====================================================
 
+
 // =====================================================
-// 5.1. PAGERANK НА ГРАФІ ФІЛЬМІВ
+// 5.1. PAGERANK ON MOVIE GRAPH
 // =====================================================
 
-// cleanup старих тимчасових ребер
+CALL gds.graph.drop('movieGraph')
+YIELD graphName
+RETURN graphName;
+
 MATCH ()-[r:CO_RATED]-()
 DELETE r;
 
-// якщо movieGraph вже існує з попереднього запуску,
-// вручну виконайте перед цим:
-// CALL gds.graph.drop('movieGraph');
-
+CALL {
+  MATCH (m:Movie)<-[r:RATED]-()
+  WITH m, count(r) AS ratingCount
+  WHERE ratingCount >= 500
+  RETURN collect(m.movieId) AS topMovieIds
+}
 MATCH (m1:Movie)<-[r1:RATED]-(u:User)-[r2:RATED]->(m2:Movie)
-WHERE r1.rating >= 4
-  AND r2.rating >= 4
+WHERE r1.rating >= 5
+  AND r2.rating >= 5
   AND id(m1) < id(m2)
+  AND m1.movieId IN topMovieIds
+  AND m2.movieId IN topMovieIds
 WITH m1, m2, count(u) AS weight
-WHERE weight >= 3
+WHERE weight >= 2
 MERGE (m1)-[co:CO_RATED]-(m2)
 SET co.weight = weight;
 
@@ -37,9 +46,7 @@ YIELD graphName, nodeCount, relationshipCount
 RETURN graphName, nodeCount, relationshipCount;
 
 CALL gds.pageRank.stream('movieGraph', {
-  relationshipWeightProperty: 'weight',
-  maxIterations: 20,
-  dampingFactor: 0.85
+  relationshipWeightProperty: 'weight'
 })
 YIELD nodeId, score
 RETURN
@@ -58,24 +65,38 @@ DELETE r;
 
 
 // =====================================================
-// 5.2. LOUVAIN НА ГРАФІ СХОЖОСТІ КОРИСТУВАЧІВ
+// 5.2. LOUVAIN ON USER SIMILARITY GRAPH
 // =====================================================
+
+CALL gds.graph.drop('userSimilarity')
+YIELD graphName
+RETURN graphName;
 
 MATCH ()-[r:SIMILAR]-()
 DELETE r;
 
-// якщо userSimilarity вже існує з попереднього запуску,
-// вручну виконайте перед цим:
-// CALL gds.graph.drop('userSimilarity');
-
-MATCH (u1:User)-[r1:RATED]->(m:Movie)<-[r2:RATED]-(u2:User)
-WHERE r1.rating >= 4
-  AND r2.rating >= 4
-  AND id(u1) < id(u2)
-WITH u1, u2, count(m) AS weight
-WHERE weight >= 3
-MERGE (u1)-[s:SIMILAR]-(u2)
-SET s.weight = weight;
+:auto
+CALL {
+  MATCH (u:User)-[r:RATED]->()
+  WITH u, count(r) AS ratingCount
+  WHERE ratingCount >= 20
+  RETURN u.userId AS userId
+  ORDER BY ratingCount DESC
+  LIMIT 10
+}
+WITH userId
+CALL {
+  WITH userId
+  MATCH (u1:User {userId: userId})-[r1:RATED]->(m:Movie)<-[r2:RATED]-(u2:User)
+  WHERE r1.rating >= 4
+    AND r2.rating >= 4
+    AND id(u1) < id(u2)
+  WITH u1, u2, count(m) AS weight
+  WHERE weight >= 1
+  MERGE (u1)-[s:SIMILAR]-(u2)
+  SET s.weight = weight,
+      s.distance = 1.0 / weight
+} IN TRANSACTIONS OF 1 ROW;
 
 CALL gds.graph.project(
   'userSimilarity',
@@ -83,7 +104,7 @@ CALL gds.graph.project(
   {
     SIMILAR: {
       orientation: 'UNDIRECTED',
-      properties: 'weight'
+      properties: ['weight', 'distance']
     }
   }
 )
@@ -123,25 +144,38 @@ DELETE r;
 
 
 // =====================================================
-// 5.3. DIJKSTRA МІЖ КОРИСТУВАЧАМИ
+// 5.3. DIJKSTRA ON USER GRAPH
 // =====================================================
+
+CALL gds.graph.drop('userGraph')
+YIELD graphName
+RETURN graphName;
 
 MATCH ()-[r:SIMILAR]-()
 DELETE r;
 
-// якщо userGraph вже існує з попереднього запуску,
-// вручну виконайте перед цим:
-// CALL gds.graph.drop('userGraph');
-
-MATCH (u1:User)-[r1:RATED]->(m:Movie)<-[r2:RATED]-(u2:User)
-WHERE r1.rating >= 4
-  AND r2.rating >= 4
-  AND id(u1) < id(u2)
-WITH u1, u2, count(m) AS weight
-WHERE weight >= 3
-MERGE (u1)-[s:SIMILAR]-(u2)
-SET s.weight = weight,
-    s.distance = 1.0 / weight;
+:auto
+CALL {
+  MATCH (u:User)-[r:RATED]->()
+  WITH u, count(r) AS ratingCount
+  WHERE ratingCount >= 20
+  RETURN u.userId AS userId
+  ORDER BY ratingCount DESC
+  LIMIT 10
+}
+WITH userId
+CALL {
+  WITH userId
+  MATCH (u1:User {userId: userId})-[r1:RATED]->(m:Movie)<-[r2:RATED]-(u2:User)
+  WHERE r1.rating >= 4
+    AND r2.rating >= 4
+    AND id(u1) < id(u2)
+  WITH u1, u2, count(m) AS weight
+  WHERE weight >= 1
+  MERGE (u1)-[s:SIMILAR]-(u2)
+  SET s.weight = weight,
+      s.distance = 1.0 / weight
+} IN TRANSACTIONS OF 1 ROW;
 
 CALL gds.graph.project(
   'userGraph',
@@ -156,10 +190,13 @@ CALL gds.graph.project(
 YIELD graphName, nodeCount, relationshipCount
 RETURN graphName, nodeCount, relationshipCount;
 
-MATCH (source:User {userId: 1}), (target:User {userId: 100})
+MATCH (s:User)-[rel:SIMILAR]-(t:User)
+WITH s, t, rel
+ORDER BY rel.weight DESC
+LIMIT 1
 CALL gds.shortestPath.dijkstra.stream('userGraph', {
-  sourceNode: source,
-  targetNode: target,
+  sourceNode: s,
+  targetNode: t,
   relationshipWeightProperty: 'distance'
 })
 YIELD index, sourceNode, targetNode, totalCost, nodeIds, costs, path
@@ -169,7 +206,8 @@ RETURN
   totalCost,
   [nodeId IN nodeIds | gds.util.asNode(nodeId).userId] AS userPath,
   size(nodeIds) - 1 AS hops,
-  costs;
+  costs
+LIMIT 1;
 
 CALL gds.graph.drop('userGraph')
 YIELD graphName

@@ -1,0 +1,502 @@
+# Project Overview
+
+This project implements a complete graph-based analysis workflow for the MovieLens dataset using Neo4j 5.x and Graph Data Science. The solution includes data conversion, graph schema design, import scripts, analytical Cypher queries, supernode analysis, and graph algorithms for ranking, community detection, and shortest path analysis. The final result is a reproducible Neo4j project that demonstrates how graph databases support recommendation-oriented workloads more naturally than traditional relational systems [web:348][web:350].
+
+The dataset is modeled as a property graph with `User`, `Movie`, and `Genre` nodes. Interactions between users and movies are represented as `RATED` relationships with rating values stored on edges, while genre membership is represented by `HAS_GENRE` relationships. This model captures the semantics of the domain directly and enables efficient traversal-centric analytics such as similarity search, neighborhood expansion, and pathfinding [web:348][web:352].
+
+# Dataset Description
+
+The project uses the MovieLens dataset in its original `.dat` format. Three source files are used in the pipeline:
+
+- `movies.dat` — movie identifier, title, and genre list.
+- `ratings.dat` — user ratings with timestamps.
+- `users.dat` — user demographic attributes.
+
+Because the raw dataset uses the `::` separator, the first step of the workflow converts the files into standard UTF-8 CSV files that can be loaded into Neo4j. The conversion stage produces:
+
+- `import/movies.csv`
+- `import/ratings.csv`
+- `import/users.csv`
+
+This preprocessing step standardizes encoding and delimiters, making the import process deterministic and repeatable.
+
+# Architecture
+
+The solution is organized into five logical layers:
+
+1. **Raw data layer** — original MovieLens `.dat` files.
+2. **Transformation layer** — `convert.py` converts `.dat` files into CSV.
+3. **Storage layer** — Neo4j stores the graph with constraints, relationships, and properties.
+4. **Cypher analytics layer** — baseline descriptive analysis and graph validation.
+5. **Graph Data Science layer** — reduced analytical projections for PageRank, Louvain, and Dijkstra.
+
+This separation improves maintainability. The ETL logic is isolated from the graph model, and the GDS workflows are separated from the base graph so that heavy analytical operations do not interfere with the main storage model. This is a standard engineering approach for recommendation and network-analysis workloads in Neo4j-based systems [web:343][web:344].
+
+# Graph Schema
+
+## Node Labels
+
+### `User`
+Represents a person who rated one or more movies.
+
+Properties:
+- `userId`
+- `gender`
+- `age`
+- `occupation`
+
+### `Movie`
+Represents a movie entity.
+
+Properties:
+- `movieId`
+- `title`
+
+### `Genre`
+Represents a movie genre.
+
+Properties:
+- `name`
+
+## Relationship Types
+
+### `RATED`
+Connects a user to a movie.
+
+Properties:
+- `rating`
+- `timestamp`
+
+### `HAS_GENRE`
+Connects a movie to a genre.
+
+### `CO_RATED`
+Temporary analytical relationship used to build the movie graph for PageRank.
+
+Properties:
+- `weight`
+
+### `SIMILAR`
+Temporary analytical relationship used to build user similarity graphs for Louvain and Dijkstra.
+
+Properties:
+- `weight`
+- `distance`
+
+## Constraints
+
+To prevent duplicates and accelerate lookup operations, the graph uses uniqueness constraints:
+
+```cypher
+CREATE CONSTRAINT user_userId IF NOT EXISTS
+FOR (u:User)
+REQUIRE u.userId IS UNIQUE;
+
+CREATE CONSTRAINT movie_movieId IF NOT EXISTS
+FOR (m:Movie)
+REQUIRE m.movieId IS UNIQUE;
+
+CREATE CONSTRAINT genre_name IF NOT EXISTS
+FOR (g:Genre)
+REQUIRE g.name IS UNIQUE;
+```
+
+These constraints are critical because the import pipeline is relationship-heavy. Without uniqueness guarantees, repeated loading would create duplicate nodes and break the analytical correctness of the graph.
+
+# Part 1. Schema Design
+
+The schema is designed around a recommendation and graph analytics use case. The central question is not only “what data do we store,” but “how do entities connect, and how can those connections be analyzed?” A relational schema can store the same facts, but the graph model exposes relationship structure directly and reduces the conceptual complexity of multi-hop analysis [web:345][web:350].
+
+The `RATED` relationship is stored as an edge because the rating is a property of the interaction between a user and a movie, not a standalone object. The `Genre` entity is modeled as a node rather than a plain string because genre traversal is needed in aggregation, interpretation of communities, and future recommendation extensions. This design decision makes the graph semantically rich and analytically flexible [web:348][web:352].
+
+## Functional Requirements
+
+The implemented solution satisfies the following functional requirements:
+
+- convert MovieLens raw files into a format suitable for Neo4j;
+- load users, movies, genres, and ratings into a graph model;
+- support exploratory and analytical Cypher queries;
+- identify structural hubs and supernodes;
+- run PageRank, Louvain, and Dijkstra using GDS;
+- compare Neo4j with a relational alternative.
+
+## Non-Functional Requirements
+
+The project also addresses non-functional requirements:
+
+- Neo4j 5.x compatible Cypher syntax;
+- repeatable loading process;
+- constraint-based deduplication;
+- maintainable file structure;
+- stable execution of graph algorithms on reduced projections.
+
+# Part 2. Data Loading
+
+The loading stage begins with `convert.py`, which transforms the raw `.dat` files into CSV format. The script reads Latin-1 encoded input, splits fields by `::`, and writes standard UTF-8 CSV output. This step removes incompatibilities between the raw dataset format and Neo4j import workflows.
+
+The import process then proceeds in a controlled order:
+
+1. Create constraints.
+2. Load `User` nodes.
+3. Load `Movie` nodes.
+4. Create `Genre` nodes.
+5. Create `HAS_GENRE` relationships.
+6. Load ratings as `RATED` relationships.
+
+This ordering guarantees referential consistency. Relationships are created only after their endpoint nodes exist, which prevents partial imports and reduces the risk of graph corruption.
+
+# Part 3. Cypher Queries
+
+The Cypher layer performs two roles: validation and descriptive analytics. First, it verifies that the graph was loaded correctly. Second, it provides the baseline metrics and insights needed before advanced algorithms are applied.
+
+Typical queries in this layer include:
+- counts of users, movies, genres, and ratings;
+- top-rated movies;
+- movies with the highest number of ratings;
+- most active users;
+- genre-level aggregations;
+- user-movie-genre traversal checks.
+
+These queries matter because they provide the descriptive context for the graph. Without baseline query validation, later algorithmic results are much harder to interpret correctly.
+
+# Part 4. Supernodes Analysis
+
+A supernode is a node with a disproportionately high number of connections compared to the rest of the graph. In the MovieLens domain, likely supernodes include highly rated blockbuster movies, extremely active users, and broad genres such as Drama or Comedy.
+
+Supernodes matter because they increase traversal fan-out. Even when a query uses an index to locate a starting node quickly, once the traversal reaches a high-degree node, the engine still needs to inspect a large number of adjacent relationships. As a result, supernodes can influence both performance and algorithmic behavior in recommendation-oriented workloads [web:345][web:350].
+
+In this project, supernodes are treated as meaningful structural features rather than noise. Popular movies function as hubs in the preference network, while broad genres act as semantic connectors across many titles. Their existence helps explain why some movies become central in PageRank and why recommendation traversals often gravitate toward well-connected content.
+
+# Part 5. Graph Data Science
+
+The Graph Data Science stage is executed on reduced analytical graphs derived from the main Neo4j dataset. Instead of running algorithms directly on the heterogeneous source graph, temporary projections are built for specific purposes. This approach improves efficiency and keeps the analytical logic aligned with the task at hand [web:343][web:344].
+
+The project uses:
+- a movie co-rating graph for PageRank;
+- a user similarity graph for Louvain;
+- a user similarity graph with weighted distances for Dijkstra.
+
+## PageRank
+
+PageRank was executed on a reduced movie graph where movies are connected through `CO_RATED` relationships. In this setup, a high score means that a movie is connected not only to many other movies, but specifically to other structurally important movies. This is why PageRank should not be confused with simple popularity: it measures influence through graph structure rather than raw frequency alone [web:257][web:343].
+
+### PageRank Results
+
+| Rank | movieId | Title | Score |
+|------|---------|-------|-------|
+| 1 | 260 | Star Wars: Episode IV - A New Hope (1977) | 4.582301668607845 |
+| 2 | 1198 | Raiders of the Lost Ark (1981) | 4.1164642578928 |
+| 3 | 2858 | American Beauty (1999) | 4.080157094907233 |
+| 4 | 1196 | Star Wars: Episode V - The Empire Strikes Back (1980) | 3.9808507799632102 |
+| 5 | 858 | Godfather, The (1972) | 3.784093523623381 |
+| 6 | 318 | Shawshank Redemption, The (1994) | 3.6887589396668394 |
+| 7 | 2571 | Matrix, The (1999) | 3.62935168752746 |
+| 8 | 527 | Schindler's List (1993) | 3.5253804650741682 |
+| 9 | 593 | Silence of the Lambs, The (1991) | 3.5075973841666808 |
+| 10 | 608 | Fargo (1996) | 3.4233969221166856 |
+| 11 | 2028 | Saving Private Ryan (1998) | 3.4130364896613155 |
+| 12 | 296 | Pulp Fiction (1994) | 3.364211057909087 |
+| 13 | 2762 | Sixth Sense, The (1999) | 3.303581709373989 |
+| 14 | 1197 | Princess Bride, The (1987) | 3.1873833469584083 |
+| 15 | 50 | Usual Suspects, The (1995) | 3.1246397413587963 |
+| 16 | 110 | Braveheart (1995) | 2.9894618305356615 |
+| 17 | 1617 | L.A. Confidential (1997) | 2.8216101491927654 |
+| 18 | 1210 | Star Wars: Episode VI - Return of the Jedi (1983) | 2.735809672598294 |
+| 19 | 1136 | Monty Python and the Holy Grail (1974) | 2.6787189112703658 |
+| 20 | 1221 | Godfather: Part II, The (1974) | 2.6523686135430875 |
+
+### Interpretation
+
+The results show that structurally central movies are mostly canonical, widely appreciated titles that connect multiple preference neighborhoods. The presence of *Star Wars*, *The Godfather*, *The Matrix*, *Pulp Fiction*, and *The Shawshank Redemption* indicates that the graph captures historically dominant and cross-segment preference anchors rather than isolated niche popularity. In recommendation terms, these titles behave as high-influence content nodes [web:257][web:343].
+
+## Louvain
+
+Louvain was executed on the reduced user similarity graph. The purpose of Louvain is to detect communities, that is, groups of nodes with denser internal connectivity than external connectivity. In this project, each community corresponds to a user cluster formed through overlapping positive rating behavior [web:341][web:342].
+
+### Louvain Community Sizes
+
+| communityId | clusterSize |
+|-------------|-------------|
+| 1014 | 2003 |
+| 2062 | 1596 |
+| 4276 | 1550 |
+| 2 | 1 |
+| 5 | 1 |
+| 6 | 1 |
+| 4 | 1 |
+| 8 | 1 |
+| 9 | 1 |
+| 7 | 1 |
+
+### Interpretation
+
+The result contains three large communities and several isolated singleton clusters. This indicates that the user similarity graph has a strong clustered core along with a small number of weakly attached or isolated users. The existence of large communities confirms that user preferences in the MovieLens graph are not random; they form dense taste-based structures, which is exactly what community detection is expected to reveal [web:341][web:251].
+
+A large Louvain community does not simply mean “many users liked the same movie.” It means the users in that group are densely interconnected through repeated similarity signals across multiple shared preferences. From a recommendation perspective, such communities are valuable because they can be interpreted as latent audience segments [web:342][web:343].
+
+## Dijkstra
+
+Dijkstra was executed on the reduced user similarity graph using the `distance` property derived from similarity weights. In this project, smaller distance means stronger similarity, because `distance = 1.0 / weight`.
+
+### Dijkstra Result
+
+- Source user: `4169`
+- Target user: `4277`
+- Total cost: `0.0013623978201634877`
+- User path: `[4169, 4277]`
+- Hops: `1`
+- Costs: `[0.0, 0.0013623978201634877]`
+
+### Interpretation
+
+The algorithm found a direct path between users `4169` and `4277`, with only one hop and extremely low total cost. This means the two users are connected through a very strong similarity relation and do not require intermediate bridge users. In practical terms, they are almost immediate neighbors in the similarity network [web:343][web:345].
+
+This result is also consistent with a **small-world** interpretation for the reduced similarity graph: even in a large graph, strong user similarity can produce extremely short paths between nodes. The result should not be overstated as a proof for the entire dataset, but it is a valid indicator that dense local connectivity exists inside the analytical subgraph [web:343][web:345].
+
+# Part 6. Graph vs Relational Databases
+
+Neo4j and PostgreSQL can both store movie-rating data, but they are optimized for different workloads. PostgreSQL is extremely strong for tabular analytics, reporting, and conventional transactional systems. Neo4j is stronger when the workload is dominated by connected data, multi-hop traversals, and relationship-centric queries [web:345][web:348].
+
+## Comparison
+
+| Aspect | Neo4j | PostgreSQL |
+|--------|-------|------------|
+| Traversals | Natural graph pattern matching | Requires multiple joins |
+| Shortest path | Native graph-oriented workflow | More complex recursive SQL logic |
+| Recommendations | Strong fit for connected data | Possible, but join-heavy and harder to maintain |
+| Community detection | Native GDS ecosystem | External tooling typically required |
+| Aggregations | Good | Excellent |
+| Reporting | Possible, but not the main strength | Excellent |
+| Relationship-centric modeling | Natural | More indirect |
+| Multi-hop logic readability | High | Lower due to join complexity |
+
+## Example: Recommendation Query
+
+### Cypher
+
+```cypher
+MATCH (u:User {userId: 1})-[:RATED]->(m:Movie)<-[:RATED]-(other:User)-[:RATED]->(rec:Movie)
+WHERE NOT EXISTS {
+  MATCH (u)-[:RATED]->(rec)
+}
+RETURN rec.title, count(*) AS score
+ORDER BY score DESC
+LIMIT 10;
+```
+
+### SQL
+
+```sql
+SELECT m2.title, COUNT(*) AS score
+FROM ratings r1
+JOIN ratings r2 ON r1.movie_id = r2.movie_id
+JOIN ratings r3 ON r2.user_id = r3.user_id
+JOIN movies m2 ON r3.movie_id = m2.movie_id
+WHERE r1.user_id = 1
+  AND r3.movie_id NOT IN (
+    SELECT movie_id FROM ratings WHERE user_id = 1
+  )
+GROUP BY m2.title
+ORDER BY score DESC
+LIMIT 10;
+```
+
+The SQL solution is valid, but the Cypher version expresses the actual graph logic more directly. As the query evolves into deeper path exploration, structural ranking, or user similarity analysis, the graph formulation remains easier to extend and reason about [web:345][web:350].
+
+# Conclusions
+
+The project delivers a full Neo4j-based implementation for MovieLens analysis, including schema design, preprocessing, import, Cypher analytics, supernode analysis, and Graph Data Science workflows. The chosen graph model accurately reflects the semantics of users, movies, ratings, and genres, which makes connected-data analysis more natural than in a relational-only approach [web:348][web:352].
+
+The PageRank stage successfully identified structurally central movies that act as anchor nodes in the preference network. Louvain detected three large user communities, confirming the presence of coherent taste clusters. Dijkstra found a direct, low-cost path between two strongly similar users, demonstrating that the similarity graph captures meaningful relational proximity [web:343][web:341][web:345].
+
+Overall, the project shows that Neo4j is well-suited for movie recommendation and graph analytics tasks where the main value lies not only in stored entities, but in the structure of relationships between them [web:344][web:349].
+
+# Recommendations for Improvement
+
+- Expand the similarity graph beyond the reduced subset of active users to obtain richer communities and more diverse paths [web:343].
+- Persist selected algorithm outputs, such as PageRank or community identifiers, as node properties for downstream querying [web:343].
+- Add visual exploration in Neo4j Browser, Bloom, or notebook-based graph reports for interpretability [web:344][web:349].
+- Extend the recommendation layer with additional GDS methods such as node similarity or personalized ranking [web:343][web:349].
+- Benchmark several threshold strategies for `SIMILAR` and `CO_RATED` construction to improve both graph density and analytical precision [web:341][web:342].
+
+SUMMARY
+================================================================================
+
+These files contain 1,000,209 anonymous ratings of approximately 3,900 movies 
+made by 6,040 MovieLens users who joined MovieLens in 2000.
+
+USAGE LICENSE
+================================================================================
+
+Neither the University of Minnesota nor any of the researchers
+involved can guarantee the correctness of the data, its suitability
+for any particular purpose, or the validity of results based on the
+use of the data set.  The data set may be used for any research
+purposes under the following conditions:
+
+     * The user may not state or imply any endorsement from the
+       University of Minnesota or the GroupLens Research Group.
+
+     * The user must acknowledge the use of the data set in
+       publications resulting from the use of the data set
+       (see below for citation information).
+
+     * The user may not redistribute the data without separate
+       permission.
+
+     * The user may not use this information for any commercial or
+       revenue-bearing purposes without first obtaining permission
+       from a faculty member of the GroupLens Research Project at the
+       University of Minnesota.
+
+If you have any further questions or comments, please contact GroupLens
+<grouplens-info@cs.umn.edu>. 
+
+CITATION
+================================================================================
+
+To acknowledge use of the dataset in publications, please cite the following
+paper:
+
+F. Maxwell Harper and Joseph A. Konstan. 2015. The MovieLens Datasets: History
+and Context. ACM Transactions on Interactive Intelligent Systems (TiiS) 5, 4,
+Article 19 (December 2015), 19 pages. DOI=http://dx.doi.org/10.1145/2827872
+
+
+ACKNOWLEDGEMENTS
+================================================================================
+
+Thanks to Shyong Lam and Jon Herlocker for cleaning up and generating the data
+set.
+
+FURTHER INFORMATION ABOUT THE GROUPLENS RESEARCH PROJECT
+================================================================================
+
+The GroupLens Research Project is a research group in the Department of 
+Computer Science and Engineering at the University of Minnesota. Members of 
+the GroupLens Research Project are involved in many research projects related 
+to the fields of information filtering, collaborative filtering, and 
+recommender systems. The project is lead by professors John Riedl and Joseph 
+Konstan. The project began to explore automated collaborative filtering in 
+1992, but is most well known for its world wide trial of an automated 
+collaborative filtering system for Usenet news in 1996. Since then the project 
+has expanded its scope to research overall information filtering solutions, 
+integrating in content-based methods as well as improving current collaborative 
+filtering technology.
+
+Further information on the GroupLens Research project, including research 
+publications, can be found at the following web site:
+        
+        http://www.grouplens.org/
+
+GroupLens Research currently operates a movie recommender based on 
+collaborative filtering:
+
+        http://www.movielens.org/
+
+RATINGS FILE DESCRIPTION
+================================================================================
+
+All ratings are contained in the file "ratings.dat" and are in the
+following format:
+
+UserID::MovieID::Rating::Timestamp
+
+- UserIDs range between 1 and 6040 
+- MovieIDs range between 1 and 3952
+- Ratings are made on a 5-star scale (whole-star ratings only)
+- Timestamp is represented in seconds since the epoch as returned by time(2)
+- Each user has at least 20 ratings
+
+USERS FILE DESCRIPTION
+================================================================================
+
+User information is in the file "users.dat" and is in the following
+format:
+
+UserID::Gender::Age::Occupation::Zip-code
+
+All demographic information is provided voluntarily by the users and is
+not checked for accuracy.  Only users who have provided some demographic
+information are included in this data set.
+
+- Gender is denoted by a "M" for male and "F" for female
+- Age is chosen from the following ranges:
+
+	*  1:  "Under 18"
+	* 18:  "18-24"
+	* 25:  "25-34"
+	* 35:  "35-44"
+	* 45:  "45-49"
+	* 50:  "50-55"
+	* 56:  "56+"
+
+- Occupation is chosen from the following choices:
+
+	*  0:  "other" or not specified
+	*  1:  "academic/educator"
+	*  2:  "artist"
+	*  3:  "clerical/admin"
+	*  4:  "college/grad student"
+	*  5:  "customer service"
+	*  6:  "doctor/health care"
+	*  7:  "executive/managerial"
+	*  8:  "farmer"
+	*  9:  "homemaker"
+	* 10:  "K-12 student"
+	* 11:  "lawyer"
+	* 12:  "programmer"
+	* 13:  "retired"
+	* 14:  "sales/marketing"
+	* 15:  "scientist"
+	* 16:  "self-employed"
+	* 17:  "technician/engineer"
+	* 18:  "tradesman/craftsman"
+	* 19:  "unemployed"
+	* 20:  "writer"
+
+MOVIES FILE DESCRIPTION
+================================================================================
+
+Movie information is in the file "movies.dat" and is in the following
+format:
+
+MovieID::Title::Genres
+
+- Titles are identical to titles provided by the IMDB (including
+year of release)
+- Genres are pipe-separated and are selected from the following genres:
+
+	* Action
+	* Adventure
+	* Animation
+	* Children's
+	* Comedy
+	* Crime
+	* Documentary
+	* Drama
+	* Fantasy
+	* Film-Noir
+	* Horror
+	* Musical
+	* Mystery
+	* Romance
+	* Sci-Fi
+	* Thriller
+	* War
+	* Western
+
+- Some MovieIDs do not correspond to a movie due to accidental duplicate
+entries and/or test entries
+- Movies are mostly entered by hand, so errors and inconsistencies may exist
+
+
+
+![convert.py-screen-working](image.png)
+
+![part3.Query-6](image-1.png)
+
+![part4. Query-5](image-2.png)
+
+![part5.All-Queries](image-3.png)
+![part5.DIJKSTRA-ON-USER-GRAPH](image-4.png)
